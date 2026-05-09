@@ -1,57 +1,120 @@
 import os
-from dependencies import get_current_user
-from fastapi import APIRouter,Depends,HTTPException
-from pydantic import BaseModel,Field
+import traceback
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from google import genai
 from google.genai import types
 
-router=APIRouter(prefix="/ai",tags=["AI"])
+from dependencies import get_current_user
 
-if not os.getenv("GEMINI_API_KEY"):
-    raise RuntimeError("GEMINI_API_KEY is not set in .env")
+# Load environment variables
+load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+router = APIRouter(
+    prefix="/ai",
+    tags=["AI"]
+)
 
-modelname="gemini-2.5-flash"
-g_congif=types.GenerateContentConfig(
+# Check API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is not set")
+
+# Gemini client
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Model
+modelname = "gemini-2.0-flash"
+
+# Config
+g_config = types.GenerateContentConfig(
     temperature=0.2
 )
-System_context="""You are the "Kuppam Student Portal Assistant," a specialized AI built to help users understand 
+
+# System Prompt
+System_context = """
+You are the "Kuppam Student Portal Assistant," a specialized AI built to help users understand 
 a Student Management System database and general educational concepts.
 
 STRICT OPERATING RULES:
-1. SUBJECT MATTER: You only answer questions regarding the Student Database (CRUD, SQLite, 
-   FastAPI integration), Python programming, Web Development (React), and Education.
-2. OUT-OF-SCOPE: If a user asks about anything else (e.g., recipes, celebrities, sports, 
-   politics, or general chat), you must politely decline by saying: 
-   "I am specialized in the Student Management System and Education. Please ask a question 
-   related to your studies or the database."
-3. DATABASE CONTEXT: You help teacher understand how their data is stored (ID, Name, Email, 
-   Major) and how the FastAPI backend interacts with the SQLite database.
-4. TONE: Be professional, encouraging, and concise. Use simple analogies for technical concepts.
-5. FORMAT: Use bullet points for steps and wrap code snippets in markdown blocks. 
-   Have to give the answer in an detail version """
 
+1. SUBJECT MATTER:
+You only answer questions regarding:
+- Student Database
+- CRUD Operations
+- SQLite
+- FastAPI
+- Python Programming
+- React/Web Development
+- Education
+
+2. OUT-OF-SCOPE:
+If a user asks about anything else (recipes, celebrities, sports, politics, etc.),
+politely respond:
+"I am specialized in the Student Management System and Education.
+Please ask a question related to your studies or the database."
+
+3. DATABASE CONTEXT:
+Help teachers and students understand:
+- Student ID
+- Name
+- Email
+- Major
+- FastAPI backend
+- SQLite database interactions
+
+4. TONE:
+Be professional, concise, and encouraging.
+
+5. FORMAT:
+- Use bullet points when needed
+- Use markdown code blocks for code
+- Give detailed answers
+"""
+
+# Request Schema
 class AskQuestion(BaseModel):
-    question:str
-class AskResponse(BaseModel):
-    answer:str
+    question: str
 
-@router.post("/ask",response_model=AskResponse)
-def ask_ai(request:AskQuestion,current_user=Depends(get_current_user)):
-    fullprompt=f"{System_context}\n\n Student Question:{request.question}"
+# Response Schema
+class AskResponse(BaseModel):
+    answer: str
+
+# AI Route
+@router.post("/ask", response_model=AskResponse)
+def ask_ai(
+    request: AskQuestion,
+    current_user=Depends(get_current_user)
+):
+    fullprompt = f"""
+{System_context}
+
+Student Question:
+{request.question}
+"""
+
     try:
-        res=client.models.generate_content(
-        model=modelname,
-        contents=fullprompt,
-        config=g_congif
-         )
-        return AskResponse(answer=res.text)
+        response = client.models.generate_content(
+            model=modelname,
+            contents=fullprompt,
+            config=g_config
+        )
+
+        return AskResponse(answer=response.text)
+
     except ValueError:
-        raise HTTPException(status_code=400,detail="This question could not be answered. Please rephrase it.")
+        raise HTTPException(
+            status_code=400,
+            detail="This question could not be answered. Please rephrase it."
+        )
+
     except Exception as e:
-        print(f"Gemini error: {e}")  
+        traceback.print_exc()
+
         raise HTTPException(
             status_code=503,
-            detail="AI service is temporarily unavailable. Try again in a moment."
+            detail=f"Gemini Error: {str(e)}"
         )
