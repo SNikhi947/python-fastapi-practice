@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 load_dotenv() 
 from database import Base, engine
-from routers import auth, students
+from routers import auth, students, ai
 
 import models.user  
 import models.student
@@ -28,6 +28,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(students.router, prefix="/students", tags=["Students"])
+app.include_router(ai.router)
 
 @app.get("/")
 def root():
