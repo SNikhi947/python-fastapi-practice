@@ -1,120 +1,45 @@
 import os
-import traceback
-
-from dotenv import load_dotenv
+from dependencies import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
 
-from dependencies import get_current_user
+router = APIRouter(prefix="/ai", tags=["AI"])
 
-# Load environment variables
-load_dotenv()
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-router = APIRouter(
-    prefix="/ai",
-    tags=["AI"]
-)
+model_name = "gemini-2.5-flash-lite"
 
-# Check API key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY is not set")
-
-# Gemini client
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-# Model
-modelname = "gemini-2.0-flash"
-
-# Config
+# Fixed typo from g_congif to g_config
 g_config = types.GenerateContentConfig(
     temperature=0.2
 )
 
-# System Prompt
-System_context = """
-You are the "Kuppam Student Portal Assistant," a specialized AI built to help users understand 
-a Student Management System database and general educational concepts.
+System_context = """Answer any question related to the education"""
 
-STRICT OPERATING RULES:
-
-1. SUBJECT MATTER:
-You only answer questions regarding:
-- Student Database
-- CRUD Operations
-- SQLite
-- FastAPI
-- Python Programming
-- React/Web Development
-- Education
-
-2. OUT-OF-SCOPE:
-If a user asks about anything else (recipes, celebrities, sports, politics, etc.),
-politely respond:
-"I am specialized in the Student Management System and Education.
-Please ask a question related to your studies or the database."
-
-3. DATABASE CONTEXT:
-Help teachers and students understand:
-- Student ID
-- Name
-- Email
-- Major
-- FastAPI backend
-- SQLite database interactions
-
-4. TONE:
-Be professional, concise, and encouraging.
-
-5. FORMAT:
-- Use bullet points when needed
-- Use markdown code blocks for code
-- Give detailed answers
-"""
-
-# Request Schema
 class AskQuestion(BaseModel):
     question: str
 
-# Response Schema
 class AskResponse(BaseModel):
     answer: str
 
-# AI Route
 @router.post("/ask", response_model=AskResponse)
-def ask_ai(
-    request: AskQuestion,
-    current_user=Depends(get_current_user)
-):
-    fullprompt = f"""
-{System_context}
-
-Student Question:
-{request.question}
-"""
-
+async def ask_ai(request: AskQuestion, current_user=Depends(get_current_user)):
+    full_prompt = f"{System_context}\n\n Student Question: {request.question}"
+    
     try:
-        response = client.models.generate_content(
-            model=modelname,
-            contents=fullprompt,
+        res = client.models.generate_content(
+            model=model_name,
+            contents=full_prompt,
             config=g_config
         )
-
-        return AskResponse(answer=response.text)
-
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="This question could not be answered. Please rephrase it."
-        )
+        
+        return AskResponse(answer=res.text)
 
     except Exception as e:
-        traceback.print_exc()
-
+        print(f"Detailed Gemini Error: {str(e)}")  
         raise HTTPException(
-            status_code=503,
-            detail=f"Gemini Error: {str(e)}"
+            status_code=500,
+            detail=f"AI Error: {str(e)}"
         )

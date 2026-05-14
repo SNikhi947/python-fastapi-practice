@@ -15,7 +15,7 @@ app = FastAPI(title="Student Management API", version="1.0.0")
 
 origins = [
     os.getenv("FRONTEND_URL", "https://student-management-system-sage-two.vercel.app"),
-    "http://localhost:5173",  # Vite default port
+    "http://localhost:5173", 
     "http://127.0.0.1:5173",
 ]
 
